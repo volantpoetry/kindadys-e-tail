@@ -1,0 +1,175 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kindady's e-Tail - Receipt</title>
+  <meta name="theme-color" content="#4b2aad">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <div class="no-print topbar hidden" id="topbar">
+    <div class="brand">
+      <span class="logo">KINDADY'S</span>
+      <span class="sub">e-Tail Receipt Generator</span>
+    </div>
+    <div class="top-actions">
+      <button id="historyBtn" class="btn ghost">History</button>
+      <div class="lock-wrap">
+        <button id="lockBtn" class="btn ghost" aria-haspopup="menu" aria-expanded="false">Lock</button>
+        <div id="lockMenu" class="lock-menu hidden" role="menu">
+          <button type="button" data-action="lock" role="menuitem">Lock now</button>
+          <button type="button" data-action="change" role="menuitem">Change passcode</button>
+          <button type="button" data-action="remove" role="menuitem">Remove passcode</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="receipt" class="receipt">
+    <div class="r-header">
+      <div class="r-header-brand">Kindady's e-Tail</div>
+      <div class="r-header-right">
+        <div>Official Payment Receipt</div>
+        <div class="r-light">Receipt of payment</div>
+      </div>
+      <button id="toolbarToggle" class="header-toggle no-print" aria-label="Show toolbar" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+    <p class="r-thanks">Thank you for your purchase. Keep this receipt for your records.</p>
+    <div class="r-section">
+      <h3>Seller</h3>
+      <div class="grid">
+        <label>Store Name<input id="sellerName" value="Kindady's e-Tail" readonly></label>
+        <label>Phone<input id="sellerPhone" value="0595736002"></label>
+        <label>Email<input id="sellerEmail" value="asordora992@gmail.com" readonly></label>
+        <label>Address<input id="sellerAddr" placeholder="Accra, Ghana"></label>
+      </div>
+    </div>
+    <div class="r-section">
+      <h3>Customer</h3>
+      <div class="grid">
+        <label><span>Name <span class="req">*</span></span><input id="buyerName" placeholder="Customer name" required></label>
+        <label><span>Phone / Email <span class="req">*</span></span><input id="buyerContact" placeholder="Customer contact" required></label>
+        <label><span>Address <span class="req">*</span></span><input id="buyerAddr" placeholder="Delivery address" required></label>
+        <label>Receipt #<input id="receiptNo" readonly></label>
+      </div>
+    </div>
+    <div class="r-section">
+      <h3>Items</h3>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th>Item <span class="req">*</span></th>
+            <th class="c-qty">Qty</th>
+            <th class="c-price">Price</th>
+            <th class="c-amt">Amount</th>
+            <th class="c-del no-print"></th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody"></tbody>
+      </table>
+      <button class="btn add-row no-print" id="addRowBtn">+ Add Item</button>
+    </div>
+    <div class="r-totals">
+      <div class="tot-line"><span>Subtotal</span><span id="subtotal">0.00</span></div>
+      <div class="tot-line"><span>Discount</span><input id="discount" type="number" value="0" step="0.01" min="0"></div>
+      <div class="tot-line"><span>Tax / VAT (%)</span><input id="taxRate" type="number" value="0" step="0.01" min="0"></div>
+      <div class="tot-line grand"><span>Total</span><span id="grandTotal">0.00</span></div>
+      <div class="tot-line"><span>Amount Paid</span><input id="amountPaid" type="number" value="0" step="0.01" min="0"></div>
+      <div class="tot-line"><span>Change</span><span id="change">0.00</span></div>
+    </div>
+    <div class="r-section">
+      <h3>Payment &amp; Date</h3>
+      <div class="grid">
+        <label><span>Payment Method <span class="req">*</span></span>
+          <select id="payMethod" required>
+            <option value="">None</option>
+            <option>Paystack</option>
+            <option>Mobile Money</option>
+            <option>Cash</option>
+            <option>Bank Transfer</option>
+            <option>Cash on Delivery</option>
+          </select>
+        </label>
+        <label><span>Transaction Ref <span class="req">*</span></span><input id="transactionRef" placeholder="Transaction reference" required></label>
+        <label>Date<input id="receiptDate" type="date"></label>
+        <label>Currency
+          <select id="currency">
+            <option value="GHS ₵">GHS ₵</option>
+            <option value="$">USD $</option>
+            <option value="NGN ₦">NGN ₦</option>
+            <option value="£">GBP £</option>
+            <option value="€">EUR €</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="actions no-print">
+    <button class="btn" id="printBtn">Print</button>
+    <button class="btn danger" id="resetBtn">New</button>
+  </div>
+  <footer class="page-footer no-print">
+    Powered by <a href="https://volantfoundry.vercel.app" target="_blank" rel="noopener">Volant Foundry</a>.
+  </footer>
+  <div class="modal-backdrop no-print hidden" id="historyModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Receipt History</h3>
+        <button class="modal-close" id="historyClose" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="history-tools">
+          <input id="historySearch" type="search" placeholder="Search by receipt # or customer">
+          <button class="btn danger" id="clearHistoryBtn">Clear All</button>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+  </div>
+  <div class="pwa-install-pop no-print" id="pwaInstallPop">
+    <img src="./icons/icon-192.png" alt="Kindady's e-Tail">
+    <div class="pwa-txt">
+      <strong>Install Kindady's e-Tail</strong>
+      <span>Get the app for faster access, offline receipts &amp; a home-screen shortcut.</span>
+    </div>
+    <button class="pwa-btn" id="pwaInstallBtn">Install</button>
+    <button class="pwa-close" id="pwaCloseBtn" aria-label="Close">&times;</button>
+  </div>
+  <div class="lock-screen" id="lockScreen">
+    <div class="lock-card">
+      <div class="lock-brand">
+        <span class="lock-logo">KINDADY'S</span>
+        <span class="lock-sub">e-Tail Receipt Generator</span>
+      </div>
+      <h2 class="lock-title" id="lockTitle">Enter passcode</h2>
+      <p class="lock-msg" id="lockMsg"></p>
+      <form id="lockForm" autocomplete="off">
+        <div id="setupFields" class="lock-fields hidden">
+          <input id="lockNew" type="password" placeholder="Create a passcode (min 4 characters)" autocomplete="new-password">
+          <input id="lockConfirm" type="password" placeholder="Confirm passcode" autocomplete="new-password">
+        </div>
+        <div id="unlockFields" class="lock-fields hidden">
+          <input id="lockInput" type="password" placeholder="Enter passcode" autocomplete="current-password">
+        </div>
+        <div id="changeFields" class="lock-fields hidden">
+          <input id="changeCurrent" type="password" placeholder="Current passcode" autocomplete="current-password">
+          <input id="changeNew" type="password" placeholder="New passcode (min 4 characters)" autocomplete="new-password">
+        </div>
+        <button type="submit" id="lockSubmit" class="btn primary lock-submit">Unlock</button>
+      </form>
+      <button type="button" id="lockCancel" class="lock-cancel hidden">Cancel</button>
+      <button type="button" id="forgotBtn" class="lock-forgot hidden">Forgot passcode?</button>
+      <div id="lockCountdown" class="lock-countdown hidden"></div>
+    </div>
+  </div>
+  <script src="./js/html2canvas.min.js"></script>
+  <script src="./js/html2pdf.bundle.min.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

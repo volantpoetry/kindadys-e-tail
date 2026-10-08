@@ -1,0 +1,35 @@
+{
+  "name": "Kindady's e-Tail Receipt",
+  "short_name": "KE Receipt ",
+  "description": "Offline, installable receipt generator for Kindady's e-Tail",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f2fb",
+  "theme_color": "#4b2aad",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
