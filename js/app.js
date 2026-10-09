@@ -441,7 +441,7 @@
     };
   })();
 
-  // ---------- Passcode lock ----------
+  // ---------- App lock (passkey / passcode) ----------
   (function () {
     var screen = $('lockScreen');
     if (!screen) return;
@@ -450,40 +450,65 @@
     var SALT_KEY = 'kindadys_lock_salt';
     var ATT_KEY = 'kindadys_lock_attempts';
     var UNTIL_KEY = 'kindadys_lock_until';
+    var FAIL_KEY = 'kindadys_lock_fail_at';
+    var CRED_KEY = 'kindadys_webauthn_id';
     var HISTORY_KEY = 'kindadys_receipts_v1';
     var MAX_ATTEMPTS = 4;
-    var LOCKOUT_MS = 24 * 60 * 60 * 1000;
+    var LOCKOUT_MS = 30 * 60 * 1000;
+    var LEGACY_LOCKOUT_MS = 24 * 60 * 60 * 1000;
 
     var card = screen.querySelector('.lock-card');
     var titleEl = $('lockTitle');
     var msgEl = $('lockMsg');
-    var form = $('lockForm');
-    var setupFields = $('setupFields');
-    var unlockFields = $('unlockFields');
-    var changeFields = $('changeFields');
-    var newEl = $('lockNew');
-    var confirmEl = $('lockConfirm');
-    var inputEl = $('lockInput');
-    var curEl = $('changeCurrent');
-    var newChangeEl = $('changeNew');
-    var cancelEl = $('lockCancel');
-    var forgotEl = $('forgotBtn');
-    var countEl = $('lockCountdown');
 
-    var mode = 'unlock';
-    var onUnlockCb = null;
+    var chooseBlock = $('chooseBlock');
+    var choosePasskey = $('choosePasskey');
+    var choosePasscode = $('choosePasscode');
+    var chooseHint = $('chooseHint');
+    var passkeyBlock = $('passkeyBlock');
+    var passkeyCreate = $('passkeyCreate');
+    var passkeyCancel = $('passkeyCancel');
+    var unlockBlock = $('unlockBlock');
+    var unlockPasskey = $('unlockPasskey');
+    var unlockForm = $('unlockForm');
+    var lockInput = $('lockInput');
+    var passcodeBlock = $('passcodeBlock');
+    var passcodeForm = $('passcodeForm');
+    var lockNew = $('lockNew');
+    var lockConfirm = $('lockConfirm');
+    var passcodeCancel = $('passcodeCancel');
+    var changeBlock = $('changeBlock');
+    var changeForm = $('changeForm');
+    var changeCurrent = $('changeCurrent');
+    var changeNew = $('changeNew');
+    var changeCancel = $('changeCancel');
+    var countEl = $('lockCountdown');
+    var forgotEl = $('forgotBtn');
+
     var countTimer = null;
+    var busy = false;
 
     function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
     function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
 
+    // --- passcode helpers ---
     function getHash() { return lsGet(HASH_KEY); }
     function getSalt() { return lsGet(SALT_KEY); }
     function hasPasscode() { return !!getHash() && !!getSalt(); }
     function getAttempts() { return Number(lsGet(ATT_KEY)) || 0; }
     function setAttempts(n) { lsSet(ATT_KEY, String(n)); }
-    function getUntil() { return Number(lsGet(UNTIL_KEY)) || 0; }
+    function getFailAt() { return Number(lsGet(FAIL_KEY)) || 0; }
+    function getUntil() { var f = getFailAt(); return f ? f + LOCKOUT_MS : 0; }
+    function setLockout() { lsSet(FAIL_KEY, String(Date.now())); lsDel(UNTIL_KEY); }
+    function clearLockout() { lsDel(FAIL_KEY); lsDel(UNTIL_KEY); setAttempts(0); }
+    function migrateLegacyLockout() {
+      var legacy = Number(lsGet(UNTIL_KEY)) || 0;
+      if (legacy && !lsGet(FAIL_KEY)) {
+        lsSet(FAIL_KEY, String(legacy - LEGACY_LOCKOUT_MS));
+        lsDel(UNTIL_KEY);
+      }
+    }
 
     function randSalt() {
       var a = new Uint8Array(16);
@@ -503,70 +528,137 @@
       return Promise.resolve('fb-' + (h >>> 0).toString(16));
     }
 
-    function fail(text) {
-      msgEl.textContent = text;
-      card.classList.remove('shake');
-      void card.offsetWidth;
-      card.classList.add('shake');
+    // --- passkey (WebAuthn) helpers ---
+    function b64url(buf) {
+      var bytes = new Uint8Array(buf), s = '';
+      for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
-    function resetFields() {
-      setupFields.classList.add('hidden');
-      unlockFields.classList.add('hidden');
-      changeFields.classList.add('hidden');
-      form.classList.remove('hidden');
-      forgotEl.classList.add('hidden');
-      cancelEl.classList.add('hidden');
-      countEl.classList.add('hidden');
-      msgEl.textContent = '';
+    function unb64url(str) {
+      str = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      var bin = atob(str), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
     }
-    function showSetup() {
-      resetFields();
-      mode = 'setup';
-      titleEl.textContent = 'Create a passcode';
-      setupFields.classList.remove('hidden');
-      newEl.value = '';
-      confirmEl.value = '';
-      newEl.focus();
+    function hasPasskey() { return !!lsGet(CRED_KEY); }    function passkeySupported() {
+      return !!(window.PublicKeyCredential && navigator.credentials &&
+        navigator.credentials.create && navigator.credentials.get && window.crypto && crypto.getRandomValues);
+    }
+    function passkeyAvailable() {
+      if (!passkeySupported()) return Promise.resolve(false);
+      if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+        return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; });
+      }
+      return Promise.resolve(true);
+    }
+    function registerPasskey() {
+      var challenge = crypto.getRandomValues(new Uint8Array(32));
+      var userId = crypto.getRandomValues(new Uint8Array(16));
+      return navigator.credentials.create({
+        publicKey: {
+          challenge: challenge,
+          rp: { name: "Kindady's e-Tail" },
+          user: { id: userId, name: 'kindadys-receipts', displayName: "Kindady's e-Tail Receipts" },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: { userVerification: 'required', authenticatorAttachment: 'platform', residentKey: 'preferred' },
+          timeout: 60000,
+          attestation: 'none'
+        }
+      }).then(function (cred) {
+        if (!cred || !cred.rawId) throw new Error('Passkey not created.');
+        lsSet(CRED_KEY, b64url(cred.rawId));
+      });
+    }
+    function authenticatePasskey() {
+      var id = lsGet(CRED_KEY);
+      if (!id) return Promise.reject(new Error('No passkey is set.'));
+      var challenge = crypto.getRandomValues(new Uint8Array(32));
+      return navigator.credentials.get({
+        publicKey: {
+          challenge: challenge,
+          allowCredentials: [{ id: unb64url(id), type: 'public-key' }],
+          userVerification: 'required',
+          timeout: 60000
+        }
+      }).then(function (assertion) {
+        if (!assertion) throw new Error('Passkey check failed.');
+      });
+    }
+
+    // --- UI helpers ---
+    function show(el, on) { if (el) el.classList.toggle('hidden', !on); }
+    function showScreen() { screen.classList.remove('hidden'); }
+    function shake() { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
+    function fail(text) { msgEl.textContent = text; shake(); }
+    function stopTimer() { if (countTimer) { clearInterval(countTimer); countTimer = null; } }
+
+    function hideAll() {
+      show(chooseBlock, false);
+      show(passkeyBlock, false);
+      show(unlockBlock, false);
+      show(passcodeBlock, false);
+      show(changeBlock, false);
+      show(countEl, false);
+      show(unlockForm, false);
+      show(unlockPasskey, false);
+      show(forgotEl, false);
+    }
+
+    function showChoose() {
+      stopTimer(); msgEl.textContent = ''; showScreen(); hideAll();
+      titleEl.textContent = 'Protect this app';
+      show(chooseBlock, true);
+      chooseHint.textContent = 'Choose how you want to unlock the receipt app.';
+      choosePasskey.disabled = false;
+      choosePasskey.classList.remove('disabled');
+      passkeyAvailable().then(function (ok) {
+        if (!ok) {
+          choosePasskey.disabled = true;
+          choosePasskey.classList.add('disabled');
+          chooseHint.textContent = 'Passkeys are not available on this device or browser. Use a passcode instead.';
+        }
+      });
+    }
+    function showPasskeySetup() {
+      stopTimer(); msgEl.textContent = ''; showScreen(); hideAll();
+      titleEl.textContent = hasPasskey() ? 'Re-register passkey' : 'Create a passkey';
+      show(passkeyBlock, true);
     }
     function showUnlock() {
-      if (!hasPasscode()) { showSetup(); return; }
-      resetFields();
-      mode = 'unlock';
-      titleEl.textContent = 'Enter passcode';
-      unlockFields.classList.remove('hidden');
-      forgotEl.classList.remove('hidden');
-      inputEl.value = '';
-      inputEl.focus();
+      stopTimer(); msgEl.textContent = ''; showScreen(); hideAll();
+      titleEl.textContent = 'Locked';
+      show(unlockBlock, true);
+      var pk = hasPasskey(), pc = hasPasscode();
+      show(unlockPasskey, pk);
+      show(unlockForm, pc);
+      show(forgotEl, pk || pc);
+      if (pc) lockInput.value = '';
+      if (pk) unlockPasskey.focus(); else if (pc) lockInput.focus();
+    }
+    function showPasscodeSetup() {
+      stopTimer(); msgEl.textContent = ''; showScreen(); hideAll();
+      titleEl.textContent = 'Create a passcode';
+      show(passcodeBlock, true);
+      lockNew.value = ''; lockConfirm.value = '';
+      lockNew.focus();
     }
     function showChange() {
-      if (!hasPasscode()) { showSetup(); return; }
-      resetFields();
-      mode = 'change';
+      stopTimer(); msgEl.textContent = ''; showScreen(); hideAll();
       titleEl.textContent = 'Change passcode';
-      changeFields.classList.remove('hidden');
-      cancelEl.classList.remove('hidden');
-      curEl.value = '';
-      newChangeEl.value = '';
-      curEl.focus();
+      show(changeBlock, true);
+      changeCurrent.value = ''; changeNew.value = '';
+      changeCurrent.focus();
     }
     function showLocked() {
-      resetFields();
-      mode = 'locked';
+      msgEl.textContent = ''; showScreen(); hideAll();
       titleEl.textContent = 'Too many attempts';
       msgEl.textContent = 'The app is locked. Please wait before trying again.';
-      form.classList.add('hidden');
-      countEl.classList.remove('hidden');
-      if (countTimer) { clearInterval(countTimer); countTimer = null; }
+      show(countEl, true);
+      stopTimer();
       function tick() {
         var left = getUntil() - Date.now();
-        if (left <= 0) {
-          clearInterval(countTimer);
-          countTimer = null;
-          setAttempts(0);
-          lsDel(UNTIL_KEY);
-          showUnlock();
-          return;
-        }
+        if (left <= 0) { stopTimer(); clearLockout(); showUnlock(); return; }
         var s = Math.floor(left / 1000);
         var hh = String(Math.floor(s / 3600)).padStart(2, '0');
         var mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
@@ -577,81 +669,99 @@
       countTimer = setInterval(tick, 1000);
     }
     function finishUnlock() {
-      if (countTimer) { clearInterval(countTimer); countTimer = null; }
+      stopTimer();
+      clearLockout();
       screen.classList.add('hidden');
-      if (typeof onUnlockCb === 'function') { var cb = onUnlockCb; onUnlockCb = null; cb(); }
     }
 
+    // --- passcode actions ---
     function handleSetup() {
-      var p = newEl.value, c = confirmEl.value;
+      var p = lockNew.value, c = lockConfirm.value;
       if (p.length < 4) { fail('Passcode must be at least 4 characters.'); return; }
       if (p !== c) { fail('Passcodes do not match.'); return; }
       var salt = randSalt();
       hashPass(p, salt).then(function (h) {
-        lsSet(SALT_KEY, salt);
-        lsSet(HASH_KEY, h);
-        setAttempts(0);
-        lsDel(UNTIL_KEY);
+        lsSet(SALT_KEY, salt); lsSet(HASH_KEY, h);
+        clearLockout();
         finishUnlock();
       });
     }
     function handleUnlock() {
-      var p = inputEl.value;
+      var p = lockInput.value;
       if (!p) { fail('Enter your passcode.'); return; }
       hashPass(p, getSalt()).then(function (h) {
-        if (h === getHash()) {
-          setAttempts(0);
-          lsDel(UNTIL_KEY);
-          finishUnlock();
-          return;
-        }
+        if (h === getHash()) { finishUnlock(); return; }
         var n = getAttempts() + 1;
         setAttempts(n);
         if (n >= MAX_ATTEMPTS) {
-          lsSet(UNTIL_KEY, String(Date.now() + LOCKOUT_MS));
+          setLockout();
           showLocked();
         } else {
           var left = MAX_ATTEMPTS - n;
           fail('Incorrect passcode. ' + left + ' attempt' + (left === 1 ? '' : 's') + ' left.');
-          inputEl.value = '';
-          inputEl.focus();
+          lockInput.value = ''; lockInput.focus();
         }
       });
     }
     function handleChange() {
-      var cur = curEl.value, np = newChangeEl.value;
+      var cur = changeCurrent.value, np = changeNew.value;
       if (np.length < 4) { fail('New passcode must be at least 4 characters.'); return; }
       hashPass(cur, getSalt()).then(function (h) {
         if (h !== getHash()) {
           fail('Current passcode is incorrect.');
-          curEl.value = '';
-          curEl.focus();
+          changeCurrent.value = ''; changeCurrent.focus();
           return;
         }
         var salt = randSalt();
         return hashPass(np, salt).then(function (nh) {
-          lsSet(SALT_KEY, salt);
-          lsSet(HASH_KEY, nh);
-          setAttempts(0);
-          lsDel(UNTIL_KEY);
+          lsSet(SALT_KEY, salt); lsSet(HASH_KEY, nh);
+          clearLockout();
           finishUnlock();
         });
       });
     }
 
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      if (mode === 'setup') handleSetup();
-      else if (mode === 'unlock') handleUnlock();
-      else if (mode === 'change') handleChange();
+    passcodeForm.addEventListener('submit', function (e) { e.preventDefault(); handleSetup(); });
+    unlockForm.addEventListener('submit', function (e) { e.preventDefault(); handleUnlock(); });
+    changeForm.addEventListener('submit', function (e) { e.preventDefault(); handleChange(); });
+
+    choosePasskey.addEventListener('click', function () { if (!choosePasskey.disabled) showPasskeySetup(); });
+    choosePasscode.addEventListener('click', showPasscodeSetup);
+    passkeyCancel.addEventListener('click', function () {
+      if (hasPasskey() || hasPasscode()) screen.classList.add('hidden'); else showChoose();
     });
-    cancelEl.addEventListener('click', function () {
-      screen.classList.add('hidden');
+    passcodeCancel.addEventListener('click', function () {
+      if (hasPasskey() || hasPasscode()) screen.classList.add('hidden'); else showChoose();
+    });
+    changeCancel.addEventListener('click', function () { screen.classList.add('hidden'); });
+
+    passkeyCreate.addEventListener('click', function () {
+      if (busy) return;
+      busy = true; msgEl.textContent = '';
+      registerPasskey().then(function () {
+        busy = false; finishUnlock();
+      }).catch(function (err) {
+        busy = false;
+        if (err && err.name === 'NotAllowedError') fail('Passkey setup was cancelled.');
+        else fail((err && err.message) || 'Could not create a passkey.');
+      });
+    });
+    unlockPasskey.addEventListener('click', function () {
+      if (busy) return;
+      busy = true; msgEl.textContent = '';
+      authenticatePasskey().then(function () {
+        busy = false; finishUnlock();
+      }).catch(function (err) {
+        busy = false;
+        if (err && err.name === 'NotAllowedError') fail('Passkey check was cancelled. Try again.');
+        else fail((err && err.message) || 'Passkey check failed.');
+      });
     });
     forgotEl.addEventListener('click', function () {
-      if (!confirm('Reset the app? This deletes ALL saved receipts AND the passcode. This cannot be undone.')) return;
-      lsDel(HASH_KEY); lsDel(SALT_KEY); lsDel(ATT_KEY); lsDel(UNTIL_KEY); lsDel(HISTORY_KEY);
-      showSetup();
+      if (!confirm('Reset the app? This deletes ALL saved receipts, your passcode and your passkey. This cannot be undone.')) return;
+      clearLockout();
+      lsDel(HASH_KEY); lsDel(SALT_KEY); lsDel(CRED_KEY); lsDel(HISTORY_KEY);
+      showChoose();
     });
 
     // Lock menu
@@ -672,33 +782,35 @@
       lockMenu.addEventListener('click', function (e) {
         var action = e.target.getAttribute('data-action');
         if (!action) return;
+        e.stopPropagation();
         lockMenu.classList.add('hidden');
         lockBtn.setAttribute('aria-expanded', 'false');
         if (action === 'lock') {
-          if (hasPasscode()) showUnlock(); else showSetup();
-        } else if (action === 'change') {
-          showChange();
+          if (hasPasskey() || hasPasscode()) showUnlock(); else showChoose();
+        } else if (action === 'passcode') {
+          if (hasPasscode()) showChange(); else showPasscodeSetup();
+        } else if (action === 'passkey') {
+          showPasskeySetup();
         } else if (action === 'remove') {
-          if (!hasPasscode()) { alert('No passcode is set.'); return; }
-          var p = prompt('Enter your current passcode to remove protection:');
-          if (p === null) return;
-          hashPass(p, getSalt()).then(function (h) {
-            if (h === getHash()) {
-              lsDel(HASH_KEY); lsDel(SALT_KEY); lsDel(ATT_KEY); lsDel(UNTIL_KEY);
-              alert('Passcode removed. The app will no longer ask for it.');
-            } else {
-              alert('Incorrect passcode.');
-            }
-          });
+          if (!(hasPasskey() || hasPasscode())) { alert('No protection is set.'); return; }
+          if (!confirm('Remove app protection? Saved receipts will be kept.')) return;
+          clearLockout();
+          lsDel(HASH_KEY); lsDel(SALT_KEY); lsDel(CRED_KEY);
+          alert('Protection removed.');
         }
       });
     }
 
     // Boot
     (function boot() {
-      if (getUntil() > Date.now()) { showLocked(); return; }
-      if (getUntil() && getUntil() <= Date.now()) { setAttempts(0); lsDel(UNTIL_KEY); }
-      if (hasPasscode()) showUnlock(); else showSetup();
+      migrateLegacyLockout();
+      if (hasPasskey() || hasPasscode()) {
+        if (getUntil() > Date.now()) { showLocked(); return; }
+        if (getUntil()) { clearLockout(); }
+        showUnlock();
+      } else {
+        showChoose();
+      }
     })();
   })();
 

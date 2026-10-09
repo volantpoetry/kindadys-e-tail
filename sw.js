@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = 'kindadys-receipt-v25';
+﻿const CACHE_NAME = 'kindadys-receipt-v28';
 const ASSETS = [
   './',
   './index.html',

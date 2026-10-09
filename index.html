@@ -23,8 +23,9 @@
         <button id="lockBtn" class="btn ghost" aria-haspopup="menu" aria-expanded="false">Lock</button>
         <div id="lockMenu" class="lock-menu hidden" role="menu">
           <button type="button" data-action="lock" role="menuitem">Lock now</button>
-          <button type="button" data-action="change" role="menuitem">Change passcode</button>
-          <button type="button" data-action="remove" role="menuitem">Remove passcode</button>
+          <button type="button" data-action="passcode" role="menuitem">Add / change passcode</button>
+          <button type="button" data-action="passkey" role="menuitem">Add / re-register passkey</button>
+          <button type="button" data-action="remove" role="menuitem">Remove protection</button>
         </div>
       </div>
     </div>
@@ -147,24 +148,48 @@
         <span class="lock-logo">KINDADY'S</span>
         <span class="lock-sub">e-Tail Receipt Generator</span>
       </div>
-      <h2 class="lock-title" id="lockTitle">Enter passcode</h2>
+      <h2 class="lock-title" id="lockTitle">Protect this app</h2>
       <p class="lock-msg" id="lockMsg"></p>
-      <form id="lockForm" autocomplete="off">
-        <div id="setupFields" class="lock-fields hidden">
+
+      <div class="lock-block hidden" id="chooseBlock">
+        <button type="button" class="btn primary block" id="choosePasskey">Use a passkey</button>
+        <button type="button" class="btn block" id="choosePasscode">Use a passcode</button>
+        <p class="lock-hint" id="chooseHint"></p>
+      </div>
+
+      <div class="lock-block hidden" id="passkeyBlock">
+        <p class="lock-hint">Your device will ask for your fingerprint, face, or screen-lock PIN. Nothing secret is stored on this device.</p>
+        <button type="button" class="btn primary block" id="passkeyCreate">Create passkey</button>
+        <button type="button" class="lock-cancel" id="passkeyCancel">Cancel</button>
+      </div>
+
+      <div class="lock-block hidden" id="unlockBlock">
+        <button type="button" class="btn primary block" id="unlockPasskey">Unlock with passkey</button>
+        <form id="unlockForm" class="lock-fields" autocomplete="off">
+          <input id="lockInput" type="password" placeholder="Enter passcode" autocomplete="current-password">
+          <button type="submit" class="btn primary lock-submit">Unlock</button>
+        </form>
+        <button type="button" class="lock-forgot" id="forgotBtn">Forgot passcode or lost passkey?</button>
+      </div>
+
+      <div class="lock-block hidden" id="passcodeBlock">
+        <form id="passcodeForm" class="lock-fields" autocomplete="off">
           <input id="lockNew" type="password" placeholder="Create a passcode (min 4 characters)" autocomplete="new-password">
           <input id="lockConfirm" type="password" placeholder="Confirm passcode" autocomplete="new-password">
-        </div>
-        <div id="unlockFields" class="lock-fields hidden">
-          <input id="lockInput" type="password" placeholder="Enter passcode" autocomplete="current-password">
-        </div>
-        <div id="changeFields" class="lock-fields hidden">
+          <button type="submit" class="btn primary lock-submit">Save passcode</button>
+        </form>
+        <button type="button" class="lock-cancel" id="passcodeCancel">Cancel</button>
+      </div>
+
+      <div class="lock-block hidden" id="changeBlock">
+        <form id="changeForm" class="lock-fields" autocomplete="off">
           <input id="changeCurrent" type="password" placeholder="Current passcode" autocomplete="current-password">
           <input id="changeNew" type="password" placeholder="New passcode (min 4 characters)" autocomplete="new-password">
-        </div>
-        <button type="submit" id="lockSubmit" class="btn primary lock-submit">Unlock</button>
-      </form>
-      <button type="button" id="lockCancel" class="lock-cancel hidden">Cancel</button>
-      <button type="button" id="forgotBtn" class="lock-forgot hidden">Forgot passcode?</button>
+          <button type="submit" class="btn primary lock-submit">Update passcode</button>
+        </form>
+        <button type="button" class="lock-cancel" id="changeCancel">Cancel</button>
+      </div>
+
       <div id="lockCountdown" class="lock-countdown hidden"></div>
     </div>
   </div>

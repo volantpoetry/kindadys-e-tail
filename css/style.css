@@ -402,6 +402,13 @@ textarea#notes { margin: 0 22px; width: calc(100% - 44px); }
 .lock-title { margin: 0 0 8px; font-size: 1.15rem; color: var(--text); }
 .lock-msg { margin: 0 0 14px; font-size: 0.85rem; color: #b3261e; min-height: 1.1em; }
 .lock-msg:empty { display: none; }
+.lock-block { display: flex; flex-direction: column; }
+.lock-hint { margin: 0 0 14px; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+.btn.block { display: block; width: 100%; padding: 12px; font-size: 0.95rem; }
+.btn.block + .btn.block,
+.lock-block .btn.block + .lock-cancel,
+.lock-block .btn.block + .lock-forgot { margin-top: 10px; }
+.btn.block.disabled, .btn.block:disabled { opacity: 0.5; cursor: not-allowed; }
 .lock-fields { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
 .lock-fields.hidden { display: none; }
 .lock-fields input { text-align: center; padding: 12px 12px; font-size: 0.95rem; }
